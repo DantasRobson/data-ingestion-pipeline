@@ -2,8 +2,8 @@ version: 2
 
 sources:
   - name: raw_data
-    database: "{{ env_var('GCP_PROJECT_ID', 'myralisdev') }}"
-    schema: "{{ env_var('BIGQUERY_DATASET_RAW', 'portfolio_raw') }}"
+    database: "{{ env_var('GCP_PROJECT_ID', 'projetoportifolio-492813') }}"
+    schema: "{{ env_var('BIGQUERY_DATASET_RAW', 'pipeline_ingestao') }}"
     tables:
       - name: feriados
         description: "Tabela bruta de feriados nacionais ingeridos via BrasilAPI."

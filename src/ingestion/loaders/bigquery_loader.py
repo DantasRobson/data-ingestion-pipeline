@@ -8,6 +8,7 @@ from google.cloud import bigquery
 from google.auth.exceptions import DefaultCredentialsError
 from src.config.settings import settings
 from src.ingestion.validators.holiday_validator import HolidayIngestionRecord
+from src.utils.cost_guard import BigQueryCostGuard
 from src.utils.logger import logger
 
 
@@ -29,23 +30,17 @@ class BigQueryLoader:
         self._client: Optional[bigquery.Client] = None
 
     def get_client(self) -> bigquery.Client:
-        """Inicializa ou retorna o client do BigQuery com tratamento de credenciais padrão."""
+        """Inicializa ou retorna o client do BigQuery utilizando ADC (Application Default Credentials)."""
         if self._client is not None:
             return self._client
 
         try:
-            if settings.google_application_credentials:
-                self._client = bigquery.Client.from_service_account_json(
-                    settings.google_application_credentials,
-                    project=self.project_id
-                )
-            else:
-                self._client = bigquery.Client(project=self.project_id)
+            self._client = bigquery.Client(project=self.project_id)
             return self._client
         except DefaultCredentialsError as exc:
             logger.error(
-                "Credenciais GCP não encontradas! Autentique-se via 'gcloud auth application-default login' "
-                "ou configure GCP_PROJECT_ID no .env."
+                "Credenciais GCP não encontradas! Execute 'gcloud auth application-default login' "
+                f"para autenticar sua conta pessoal no projeto {self.project_id}."
             )
             raise exc
 
@@ -72,10 +67,6 @@ class BigQueryLoader:
 
         table_ref = client.dataset(self.dataset_name).table(self.table_name)
         table = bigquery.Table(table_ref, schema=schema)
-        table.time_partitioning = bigquery.TimePartitioning(
-            type_=bigquery.TimePartitioningType.YEAR,
-            field="date"
-        )
         table.clustering_fields = ["type", "name"]
         client.create_table(table, exists_ok=True)
         logger.info(f"Tabela garantida: {self.full_table_id}")
@@ -83,8 +74,9 @@ class BigQueryLoader:
     def load_holidays_idempotent(self, records: List[HolidayIngestionRecord]) -> int:
         """
         Carrega feriados garantindo idempotência e sem duplicações (RF-005).
-        Utiliza MERGE via tabela temporária de staging no BigQuery.
-        Retorna o número de registros processados.
+        Utiliza Batch Load Job com desduplicação determinística em memória e carga WRITE_TRUNCATE.
+        Compatível 100% com BigQuery Free Tier/Sandbox (Batch Loads gratuitos, sem dependência de DML).
+        Retorna o número de registros persistidos.
         """
         if not records:
             logger.info("Nenhum registro para carregar.")
@@ -92,9 +84,32 @@ class BigQueryLoader:
 
         client = self.get_client()
         self.ensure_dataset_and_table()
+        cost_guard = BigQueryCostGuard()
 
-        rows_to_insert = [
-            {
+        table = client.get_table(self.full_table_id)
+        existing_records_dict = {}
+
+        if table.num_rows and table.num_rows > 0:
+            logger.info(f"Lendo {table.num_rows} registros existentes para deduplicação idempotente...")
+            read_sql = f"SELECT holiday_id, date, name, type, source, ingested_at FROM `{self.full_table_id}`"
+            results, metric = cost_guard.execute_guarded_query(
+                client=client,
+                query=read_sql,
+                step_name="read_existing_holidays"
+            )
+            for row in results:
+                existing_records_dict[row["holiday_id"]] = {
+                    "holiday_id": row["holiday_id"],
+                    "date": str(row["date"]),
+                    "name": row["name"],
+                    "type": row["type"],
+                    "source": row["source"],
+                    "ingested_at": row["ingested_at"].isoformat() if hasattr(row["ingested_at"], "isoformat") else str(row["ingested_at"])
+                }
+
+        # Mescla com os novos registros (atualiza ou insere por holiday_id)
+        for r in records:
+            existing_records_dict[r.holiday_id] = {
                 "holiday_id": r.holiday_id,
                 "date": r.date,
                 "name": r.name,
@@ -102,56 +117,27 @@ class BigQueryLoader:
                 "source": r.source,
                 "ingested_at": r.ingested_at.isoformat()
             }
-            for r in records
-        ]
 
-        temp_table_name = f"_temp_stg_{self.table_name}_{records[0].ingested_at.strftime('%Y%m%d%H%M%S')}"
-        temp_table_id = f"{self.project_id}.{self.dataset_name}.{temp_table_name}"
+        rows_to_load = list(existing_records_dict.values())
+        logger.info(f"Carregando {len(rows_to_load)} registros desduplicados via Batch Load Job (gratuito e idempotente)...")
 
-        logger.info(f"Criando tabela temporária de carga: {temp_table_id}")
         schema = [
-            bigquery.SchemaField("holiday_id", "STRING", mode="REQUIRED"),
-            bigquery.SchemaField("date", "DATE", mode="REQUIRED"),
-            bigquery.SchemaField("name", "STRING", mode="REQUIRED"),
-            bigquery.SchemaField("type", "STRING", mode="REQUIRED"),
-            bigquery.SchemaField("source", "STRING", mode="REQUIRED"),
-            bigquery.SchemaField("ingested_at", "TIMESTAMP", mode="REQUIRED"),
+            bigquery.SchemaField("holiday_id", "STRING", mode="REQUIRED", description="Hash único para deduplicação"),
+            bigquery.SchemaField("date", "DATE", mode="REQUIRED", description="Data do feriado"),
+            bigquery.SchemaField("name", "STRING", mode="REQUIRED", description="Nome do feriado"),
+            bigquery.SchemaField("type", "STRING", mode="REQUIRED", description="Tipo do feriado (national, etc)"),
+            bigquery.SchemaField("source", "STRING", mode="REQUIRED", description="Origem dos dados (ex: BrasilAPI)"),
+            bigquery.SchemaField("ingested_at", "TIMESTAMP", mode="REQUIRED", description="Data/hora de ingestão UTC"),
         ]
-        temp_table = bigquery.Table(temp_table_id, schema=schema)
-        temp_table.expires = None
-        client.create_table(temp_table, exists_ok=True)
 
-        try:
-            job_config = bigquery.LoadJobConfig(
-                schema=schema,
-                write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE
-            )
-            load_job = client.load_table_from_json(rows_to_insert, temp_table_id, job_config=job_config)
-            load_job.result()
+        job_config = bigquery.LoadJobConfig(
+            schema=schema,
+            write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE
+        )
 
-            merge_sql = f"""
-            MERGE `{self.full_table_id}` T
-            USING `{temp_table_id}` S
-            ON T.holiday_id = S.holiday_id
-            WHEN MATCHED THEN
-                UPDATE SET
-                    T.date = S.date,
-                    T.name = S.name,
-                    T.type = S.type,
-                    T.source = S.source,
-                    T.ingested_at = S.ingested_at
-            WHEN NOT MATCHED THEN
-                INSERT (holiday_id, date, name, type, source, ingested_at)
-                VALUES (S.holiday_id, S.date, S.name, S.type, S.source, S.ingested_at);
-            """
+        load_job = client.load_table_from_json(rows_to_load, self.full_table_id, job_config=job_config)
+        load_job.result()
 
-            logger.info("Executando MERGE idempotente no BigQuery...")
-            query_job = client.query(merge_sql)
-            query_job.result()
-
-            logger.info(f"MERGE concluído com sucesso. {len(records)} registros sincronizados.")
-            return len(records)
-
-        finally:
-            client.delete_table(temp_table_id, not_found_ok=True)
-            logger.info(f"Tabela temporária {temp_table_name} removida.")
+        cost_guard.print_usage_report(client)
+        logger.info(f"Carga RAW concluída com sucesso. {len(rows_to_load)} registros sincronizados em {self.full_table_id}.")
+        return len(rows_to_load)

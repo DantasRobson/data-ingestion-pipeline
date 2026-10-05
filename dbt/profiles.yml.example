@@ -1,0 +1,24 @@
+portfolio_bigquery:
+  target: dev
+  outputs:
+    dev:
+      type: bigquery
+      method: oauth
+      project: "{{ env_var('GCP_PROJECT_ID', 'SEU_PROJECT_ID_PESSOAL') }}"
+      dataset: "{{ env_var('BIGQUERY_DATASET_RAW', 'pipeline_ingestao') }}"
+      threads: 4
+      location: "{{ env_var('BQ_LOCATION', 'southamerica-east1') }}"
+      maximum_bytes_billed: 10737418240
+      timeout_seconds: 300
+      priority: interactive
+
+    prod:
+      type: bigquery
+      method: oauth
+      project: "{{ env_var('GCP_PROJECT_ID', 'SEU_PROJECT_ID_PESSOAL') }}"
+      dataset: "{{ env_var('BIGQUERY_DATASET_RAW', 'pipeline_ingestao') }}"
+      threads: 4
+      location: "{{ env_var('BQ_LOCATION', 'southamerica-east1') }}"
+      maximum_bytes_billed: 10737418240
+      timeout_seconds: 300
+      priority: interactive

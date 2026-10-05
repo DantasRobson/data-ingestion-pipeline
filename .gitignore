@@ -28,6 +28,7 @@ gcp_*.json
 dbt/target/
 dbt/dbt_packages/
 dbt/logs/
+dbt/.user.yml
 dbt/profiles.yml
 
 # Relatórios & Artefatos de Execução
@@ -49,6 +50,7 @@ logs/
 local/
 backup/
 debug/
+data/
 
 # Permite versionar CSVs de seeds do dbt
 *.csv
