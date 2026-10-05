@@ -1,0 +1,63 @@
+# Python Cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# Ambientes Virtuais
+venv/
+env/
+ENV/
+.venv/
+
+# Variáveis de Ambiente e Credenciais (NUNCA COMMITAR)
+.env
+.env.*
+*.json
+!package.json
+*.pem
+*.key
+*.p12
+*.crt
+credentials/
+*service_account*.json
+gcp_*.json
+
+# dbt Artifacts & Logs
+dbt/target/
+dbt/dbt_packages/
+dbt/logs/
+dbt/profiles.yml
+
+# Relatórios & Artefatos de Execução
+reports/
+report/
+output/
+outputs/
+results/
+artifacts/
+temp/
+tmp/
+logs/
+*.log
+
+# Dados locais (Exceto seeds versionados do dbt)
+*.parquet
+*.xlsx
+*.xls
+local/
+backup/
+debug/
+
+# Permite versionar CSVs de seeds do dbt
+*.csv
+!dbt/seeds/*.csv
+
+# IDEs & Editores
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db

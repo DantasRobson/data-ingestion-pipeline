@@ -1,0 +1,55 @@
+version: 2
+
+models:
+  - name: stg_feriados
+    description: "Modelo de Staging para feriados nacionais. Dados limpos, tipados e deduplicados."
+    columns:
+      - name: holiday_id
+        description: "Chave primária determinística do feriado."
+        tests:
+          - unique
+          - not_null
+
+      - name: holiday_date
+        description: "Data do feriado."
+        tests:
+          - not_null
+
+      - name: holiday_name
+        description: "Nome oficial do feriado nacional."
+        tests:
+          - not_null
+
+      - name: holiday_type
+        description: "Classificação do feriado."
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['national', 'facultativo', 'state', 'municipal']
+
+      - name: data_source
+        description: "Origem da informação."
+        tests:
+          - not_null
+
+      - name: ingested_at
+        description: "Data/hora UTC em que o registro foi ingerido."
+        tests:
+          - not_null
+
+  - name: stg_sales
+    description: "Modelo de Staging para transações comerciais sintéticas."
+    columns:
+      - name: sale_id
+        description: "Identificador único da venda."
+        tests:
+          - unique
+          - not_null
+      - name: sale_date
+        description: "Data da venda."
+        tests:
+          - not_null
+      - name: revenue
+        description: "Faturamento gerado."
+        tests:
+          - not_null

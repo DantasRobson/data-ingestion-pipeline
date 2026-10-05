@@ -1,0 +1,85 @@
+version: 2
+
+models:
+  - name: dim_calendario
+    description: "Dimensão analítica de tempo enriquecida com feriados nacionais e janelas de varejo."
+    columns:
+      - name: date
+        description: "Chave primária da dimensão calendário."
+        tests:
+          - unique
+          - not_null
+
+      - name: is_business_day
+        description: "Indicador de dia útil (segunda a sexta não feriado)."
+        tests:
+          - not_null
+
+      - name: is_holiday
+        description: "Indicador de feriado nacional."
+        tests:
+          - not_null
+
+  - name: fct_sales
+    description: "Tabela fato transacional de vendas com contexto de proximidade de feriados."
+    columns:
+      - name: sale_id
+        description: "Chave primária da transação."
+        tests:
+          - unique
+          - not_null
+
+      - name: sale_date
+        description: "Data em que a transação foi realizada."
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_calendario')
+              field: date
+
+      - name: quantity
+        description: "Quantidade de itens vendidos."
+        tests:
+          - not_null
+
+      - name: revenue
+        description: "Faturamento bruto da transação."
+        tests:
+          - not_null
+
+      - name: sales_period_context
+        description: "Contexto do momento da venda em relação ao calendário."
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['DIA_COMUM', 'PRE_FERIADO', 'DURANTE_FERIADO', 'POS_FERIADO']
+
+  - name: mart_oportunidades_comerciais
+    description: "Mart analítico com indicadores de impacto de feriados no faturamento e classificação de oportunidades de negócio."
+    columns:
+      - name: holiday_name
+        description: "Nome do feriado analisado."
+        tests:
+          - not_null
+
+      - name: product_category
+        description: "Categoria de produto comercializada."
+        tests:
+          - not_null
+
+      - name: sales_growth_pct
+        description: "Percentual de variação de faturamento na janela pré-feriado vs baseline normal."
+        tests:
+          - not_null
+
+      - name: opportunity_score
+        description: "Score de prioridade de negócio segundo regras do PRD (ALTA, MEDIA, BAIXA)."
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['ALTA', 'MEDIA', 'BAIXA']
+
+      - name: recommendation
+        description: "Recomendação prática acionável para times de Vendas/Marketing."
+        tests:
+          - not_null

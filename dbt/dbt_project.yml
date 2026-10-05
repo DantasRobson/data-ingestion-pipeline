@@ -1,0 +1,32 @@
+name: 'data_ingestion_pipeline'
+version: '1.0.0'
+config-version: 2
+
+profile: 'portfolio_bigquery'
+
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+models:
+  data_ingestion_pipeline:
+    staging:
+      +materialized: view
+      +dataset: "{{ env_var('BIGQUERY_DATASET_STAGING', 'portfolio_staging') }}"
+    intermediate:
+      +materialized: table
+      +dataset: "{{ env_var('BIGQUERY_DATASET_INTERMEDIATE', 'portfolio_intermediate') }}"
+    marts:
+      +materialized: table
+      +dataset: "{{ env_var('BIGQUERY_DATASET_MARTS', 'portfolio_marts') }}"
+
+seeds:
+  data_ingestion_pipeline:
+    +dataset: "{{ env_var('BIGQUERY_DATASET_RAW', 'portfolio_raw') }}"

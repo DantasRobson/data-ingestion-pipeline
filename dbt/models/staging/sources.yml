@@ -1,0 +1,25 @@
+version: 2
+
+sources:
+  - name: raw_data
+    database: "{{ env_var('GCP_PROJECT_ID', 'myralisdev') }}"
+    schema: "{{ env_var('BIGQUERY_DATASET_RAW', 'portfolio_raw') }}"
+    tables:
+      - name: feriados
+        description: "Tabela bruta de feriados nacionais ingeridos via BrasilAPI."
+        columns:
+          - name: holiday_id
+            description: "Hash determinístico SHA-256 gerado a partir de date + name + type."
+          - name: date
+            description: "Data do feriado nacional."
+          - name: name
+            description: "Nome oficial do feriado."
+          - name: type
+            description: "Tipo do feriado (national, facultativo, etc)."
+          - name: source
+            description: "Fonte originária do dado."
+          - name: ingested_at
+            description: "Timestamp UTC do momento em que o registro foi ingerido."
+
+      - name: raw_sales
+        description: "Tabela de transações de vendas (segunda fonte para análises comerciais)."

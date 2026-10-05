@@ -1,0 +1,26 @@
+version: 2
+
+models:
+  - name: int_calendario_comercial
+    description: "Modelo intermediário unificando série temporal de datas com feriados e métricas de proximidade comercial."
+    columns:
+      - name: calendar_date
+        description: "Data do calendário."
+        tests:
+          - unique
+          - not_null
+
+      - name: is_weekend
+        description: "Flag indicativa de final de semana."
+        tests:
+          - not_null
+
+      - name: is_holiday
+        description: "Flag indicativa de feriado."
+        tests:
+          - not_null
+
+      - name: is_business_day
+        description: "Flag indicativa de dia útil."
+        tests:
+          - not_null
