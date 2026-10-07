@@ -161,7 +161,7 @@ Copy-Item .env.example .env
 ```
 Conteúdo do [.env](file:///.env):
 ```env
-GCP_PROJECT_ID=projetoportifolio-492813
+GCP_PROJECT_ID=seu-project-id
 BQ_LOCATION=southamerica-east1
 BQ_DATASET=pipeline_ingestao
 ```
